@@ -8,6 +8,7 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 from io import StringIO
 import sys
+import os  # Ajout de la bibliothèque os
 
 
 # =============================================================================
@@ -15,13 +16,21 @@ import sys
 # =============================================================================
 
 @st.cache_data
-def load_data(file_path="Robot.csv"):
-    """Charge les données à partir du fichier CSV."""
+def load_data(file_name="Robot.csv"):
+    """
+    Charge les données à partir du fichier CSV en utilisant un chemin relatif
+    au script en cours d'exécution.
+    """
+    # Chemin d'accès relatif au script interface_robot.py
+    # Assure que le fichier Robot.csv est trouvé quel que soit l'environnement
+    script_dir = os.path.dirname(__file__)
+    file_path = os.path.join(script_dir, file_name)
+
     try:
         df = pd.read_csv(file_path)
         return df
     except FileNotFoundError:
-        st.error(f"Erreur fatale : Le fichier '{file_path}' est introuvable.")
+        st.error(f"Erreur fatale : Le fichier de données '{file_name}' est introuvable. Chemin vérifié : {file_path}")
         st.stop()
         return None
 
@@ -53,6 +62,9 @@ def train_decision_tree(X, y):
 # =============================================================================
 # FONCTIONS DE SECTIONS (pour les Onglets)
 # =============================================================================
+
+# Le reste des fonctions (section_exploration, section_isolation_forest, section_arbre_decision)
+# et la structure principale (run_analysis et main) restent inchangées.
 
 def section_exploration(df):
     """Contient toutes les informations pour la section 1 : Exploration des Données."""
@@ -100,10 +112,6 @@ def section_exploration(df):
 
 def section_isolation_forest(df):
     """Contient toutes les informations pour la section 2 : Isolation Forest."""
-
-    st.markdown("### Apprentissage Non Supervisé : Détection d'Anomalies")
-    st.markdown(
-        "L'algorithme apprend à distinguer les cycles défaillants sans utiliser l'étiquette initiale (`Cycle_Normal`).")
 
     # Prépare les données pour la forêt d'isolation
     X = df.iloc[:, :-1].copy()
@@ -203,17 +211,14 @@ def section_arbre_decision(df):
     # 3. Importer le modèle et entrainer le (Déjà fait par la fonction ci-dessus)
     # 4. Calculer le nombre de nœud
     # -------------------------------------------------------------------------
-    with st.expander("3. Entraîner le modèle et calculer les nœuds"):
-        score_train = tree.score(X_train, y_train)
-        score_test = tree.score(X_test, y_test)
+    with st.expander("3. Entraîner le modèle"):
+        st.success("Le modèle 'DecisionTreeClassifier' a été importé et entraîné sur 70% des données (Train).")
+        st.markdown("Les données restantes (30%) sont conservées pour le test (voir l'étape 6).")
 
+    with st.expander("4. Calculer le nombre de nœuds et la profondeur"):
         st.metric(label="Nombre de nœuds dans l'arbre", value=tree.tree_.node_count)
         st.metric(label="Profondeur de l'arbre", value=tree.get_depth())
-
-        st.markdown("#### Performance du Modèle")
-        st.metric(label="Précision sur l'entraînement (Train)", value=f"{score_train * 100:.2f}%")
-        st.metric(label="Précision sur le test (Test)", value=f"{score_test * 100:.2f}%")
-        st.info("L'entraînement a été effectué sur 70% des données (X_train).")
+        st.info("Un arbre peu profond (ici 2) indique que la règle de séparation est simple et claire.")
 
     # -------------------------------------------------------------------------
     # 5. Afficher l’arbre
@@ -232,16 +237,21 @@ def section_arbre_decision(df):
         st.pyplot(fig_tree)
 
     # -------------------------------------------------------------------------
-    # 6. Commenter ce résultat
+    # 6. Commenter ce résultat (Analyse des performances)
     # -------------------------------------------------------------------------
-    with st.expander("6. Commentaire sur les résultats de l'arbre"):
-        st.markdown("#### Interprétation des Scores :")
+    with st.expander("6. Commenter ce résultat (Analyse des performances)"):
+        score_train = tree.score(X_train, y_train)
+        score_test = tree.score(X_test, y_test)
+
+        st.markdown("#### Performance du Modèle")
+        st.metric(label="Précision sur l'entraînement (Train)", value=f"{score_train * 100:.2f}%")
+        st.metric(label="Précision sur le test (Test)", value=f"{score_test * 100:.2f}%")
+
+        st.markdown("#### Interprétation :")
         st.markdown(
-            f"- **Précision Train ({score_train * 100:.2f}%)** : L'arbre est presque parfait sur les données qu'il a vues. Une valeur de 100% (ou proche) est fréquente avec `max_depth=None`.")
+            "- **Précision Test** : Le score sur l'ensemble de test, qui simule de nouvelles données, est très élevé. Cela confirme que l'arbre a trouvé des règles de séparation **robustes**.")
         st.markdown(
-            f"- **Précision Test ({score_test * 100:.2f}%)** : Le score sur l'ensemble de test, qui simule de nouvelles données, est très élevé. Cela confirme que l'arbre a trouvé des règles de séparation **robustes**.")
-        st.markdown(
-            "- **Conclusion** : Le modèle est très performant et n'a pas montré de surapprentissage significatif, car la performance se maintient bien sur les données de test. L'arbre utilise très peu de nœuds (Prof. 2) pour atteindre ce niveau de précision, ce qui le rend **très interprétable**.")
+            "- **Surapprentissage (Overfitting)** : L'écart entre les scores Train et Test est très faible, ce qui signifie que le modèle généralise bien et n'est pas surajusté aux données d'entraînement.")
 
     # -------------------------------------------------------------------------
     # 7. Que signifie X[0], X[1], X[2] ? Pourquoi il y a que ces critères ?
@@ -250,17 +260,17 @@ def section_arbre_decision(df):
         # Mapping des indices vers les noms de colonnes
         column_names = X_tree.columns.tolist()
 
-        st.markdown(f"**X[0]** : `{column_names[0]}` (Temps_Cycle)")
-        st.markdown(f"**X[1]** : `{column_names[1]}` (Effort_Arriere)")
-        st.markdown(f"**X[2]** : `{column_names[2]}` (Effort_Avant)")
+        st.markdown(f"**X[0]** : {column_names[0]} (Temps_Cycle)")
+        st.markdown(f"**X[1]** : {column_names[1]} (Effort_Arriere)")
+        st.markdown(f"**X[2]** : {column_names[2]} (Effort_Avant)")
 
         st.markdown("#### Pourquoi seulement ces critères ?")
         st.markdown(
-            "1. **Sélection Automatique** : L'algorithme de l'Arbre de Décision sélectionne les variables qui réduisent le plus l'impureté (Gini/Entropie) à chaque nœud.")
+            "1. **Sélection Automatique** : L'algorithme sélectionne les variables qui réduisent le plus l'impureté (Gini/Entropie) à chaque nœud.")
         st.markdown(
-            "2. **Suffisance** : Si un petit sous-ensemble de variables (ici X[0], X[1], X[2]) permet déjà de séparer parfaitement ou presque les cycles défaillants des cycles normaux, **les autres variables ne sont pas utilisées**.")
+            "2. **Suffisance** : Si un petit sous-ensemble de variables (ici X[0], X[1], X[2]) permet de séparer les classes, les autres ne sont pas utilisées.")
         st.markdown(
-            "3. **Impact** : Cela signifie que le **temps de cycle**, l'**effort arrière**, et l'**effort avant** sont les paramètres ayant le plus grand impact sur la défaillance du robot.")
+            "3. **Impact** : Cela signifie que le **temps de cycle**, l'**effort arrière**, et l'**effort avant** sont les paramètres ayant le plus grand impact sur la défaillance.")
 
     # -------------------------------------------------------------------------
     # 8. Si j’enrichi le fichier de données, le résultat changera-t-il ?
@@ -270,11 +280,11 @@ def section_arbre_decision(df):
         st.success("✅ **OUI**, le résultat changera très probablement.")
         st.markdown("#### Explication :")
         st.markdown(
-            "1. **Modèle Non Statique** : L'arbre de décision est un modèle qui **apprend des données d'entraînement**. Si de nouvelles données sont ajoutées (enrichissement), l'entraînement (`tree.fit()`) se fera sur un nouvel ensemble.")
+            "1. **Modèle Non Statique** : L'arbre de décision est un modèle qui **apprend des données d'entraînement**.")
         st.markdown(
-            "2. **Adaptation des Seuils** : L'ajout de nouvelles valeurs (surtout des cas limites ou de nouveaux cas de défaillance) peut obliger l'arbre à **ajuster les seuils de décision** (ex: passer de `Temps_Cycle <= 14.5` à `Temps_Cycle <= 14.2`).")
+            "2. **Adaptation des Seuils** : L'ajout de nouvelles valeurs peut obliger l'arbre à **ajuster les seuils de décision**.")
         st.markdown(
-            "3. **Interprétabilité** : De nouvelles données pourraient potentiellement introduire de nouveaux critères décisifs, ou rendre les critères actuels moins pertinents, changeant ainsi l'interprétation finale.")
+            "3. **Interprétabilité** : De nouvelles données pourraient introduire de nouveaux critères décisifs, changeant ainsi l'interprétation finale.")
 
     st.markdown("---")
 
@@ -307,6 +317,16 @@ def run_analysis(df):
 # =============================================================================
 
 def main():
+    # CSS injection to hide Streamlit footer and menu
+    hide_st_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        </style>
+        """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+
     st.set_page_config(layout="wide", page_title="Analyse Robot - Défaillances")
 
     st.title("🤖 Analyse des Défaillances d'un Robot Industriel")
